@@ -12,7 +12,7 @@ A streamlined Docker setup for running Claude Code with `--dangerously-skip-perm
 
 ## Prerequisites
 
-- macOS (M1/M2/Intel)
+- macOS
 - [Docker Desktop](https://www.docker.com/products/docker-desktop) installed and running
 - [Claude Code](https://claude.ai/download) installed on your Mac
 - Claude Code subscription (authenticated via `claude login` on your Mac)
