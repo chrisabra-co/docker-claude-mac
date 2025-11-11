@@ -69,7 +69,7 @@ mkdir workspace
 
 # Copy .claude folder from template (if it exists)
 # Update this path to match your template location
-TEMPLATE_CLAUDE="$HOME/claude-projects/templates/x-current-quickstart/.claude"
+TEMPLATE_CLAUDE="$HOME/claude-projects/templates/proj-quickstart/.claude"
 if [ -d "$TEMPLATE_CLAUDE" ]; then
     cp -r "$TEMPLATE_CLAUDE" workspace/.claude
     echo "✅ Copied .claude folder from template"

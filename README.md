@@ -28,12 +28,113 @@ cd docker-claude-mac
 
 ### 2. Set Up Directory Structure
 
-Create your projects directory:
+This setup uses two main directories:
+
+**Projects Directory** - Where your Docker-based Claude Code projects will live
+**Templates Directory** - Stores reusable `.claude` configurations to auto-apply to new projects
+
+#### Option A: Use the Default Structure (Recommended)
 
 ```bash
 mkdir -p ~/claude-projects/projects
 mkdir -p ~/claude-projects/templates
 ```
+
+#### Option B: Use Your Existing Project Folders
+
+If you already have a preferred location for your projects, you can use that instead:
+
+```bash
+# Example: Use your existing ~/projects folder
+mkdir -p ~/projects
+mkdir -p ~/claude-projects/templates
+
+# You'll need to edit the script (step 3) to point to your location
+```
+
+Then edit `~/bin/new-code-proj` after installation and change line 14:
+```bash
+# FROM:
+PROJECT_PATH="$HOME/claude-projects/projects/$PROJECT_NAME"
+
+# TO (example):
+PROJECT_PATH="$HOME/projects/$PROJECT_NAME"
+```
+
+#### Setting Up Templates (Optional but Recommended)
+
+The templates folder stores your `.claude` configuration that gets **copied once** to every new project at creation time.
+
+> **📋 Important:** Templates are copied when you create a new project, not synced continuously. Updating the template only affects future projects, not existing ones.
+
+> **⚠️ Security:** Never include API keys, passwords, tokens, or secrets in templates. They'll be copied to every project you create.
+
+**What goes in the template `.claude` folder:**
+- **Commands** (`.claude/commands/`) - Custom slash commands
+- **Agents** (`.claude/agents/`) - Specialized AI agents
+- **MCP Servers** (`.claude/mcp.json`) - Model Context Protocol configurations
+- **Settings** (`.claude/settings.json`) - Project-level settings
+- **Prompts** (`.claude/prompts/`) - Reusable prompt templates
+
+**Template Copy Flow:**
+```
+Template (source)                    New Project (destination)
+~/claude-projects/templates/         ~/claude-projects/projects/my-app/
+  proj-quickstart/                     workspace/
+    .claude/            COPIED ONCE →    .claude/
+      commands/                            commands/
+      agents/                              agents/
+      mcp.json                             mcp.json
+```
+
+**To set up your template:**
+
+```bash
+# Create the template directory structure
+mkdir -p ~/claude-projects/templates/proj-quickstart/.claude
+
+# Option 1: Copy from an existing project's .claude folder
+cp -r ~/path/to/existing/project/.claude/* ~/claude-projects/templates/proj-quickstart/.claude/
+
+# Option 2: Manually create your template structure
+mkdir -p ~/claude-projects/templates/proj-quickstart/.claude/commands
+mkdir -p ~/claude-projects/templates/proj-quickstart/.claude/agents
+
+# Add your custom commands, agents, MCP configs, etc.
+```
+
+**Example: Create a simple review command**
+
+```bash
+# Create a code review command in your template
+cat > ~/claude-projects/templates/proj-quickstart/.claude/commands/review.md << 'EOF'
+Review this code for:
+- Security vulnerabilities (XSS, SQL injection, etc.)
+- Performance issues and bottlenecks
+- Best practices and code quality
+- Potential bugs and edge cases
+
+Provide specific suggestions for improvement.
+EOF
+```
+
+**Example template contents:**
+```
+~/claude-projects/templates/proj-quickstart/.claude/
+├── commands/
+│   ├── review.md           # Custom code review command
+│   └── test.md             # Custom test runner command
+├── agents/
+│   └── debugger.md         # Specialized debugging agent
+├── mcp.json                # Your MCP server configurations
+└── settings.json           # Default project settings
+```
+
+**Starting without a template is perfectly fine!** If you don't create a template, new projects will have an empty workspace ready for you to build from scratch.
+
+> **💡 Tip:** You can rename the template folder (change `proj-quickstart` to anything) by editing line 72 in `~/bin/new-code-proj` after installation.
+
+> **📚 Multiple Templates:** Currently, the script supports one template at a time. To use different templates, edit the `TEMPLATE_CLAUDE` path in the script before creating each project, or create multiple versions of the script.
 
 ### 3. Install the Project Creation Script
 
@@ -80,16 +181,33 @@ claude login
 
 This stores your authentication in `~/.anthropic/` which gets mounted into containers.
 
-### 6. Create a Template (Optional)
+### 6. Verify Template Setup (If You Created One)
 
-If you have a `.claude` folder you want to reuse across projects:
+If you created a template in step 2, verify it's ready:
 
 ```bash
-# Place your template at:
-~/claude-projects/templates/x-current-quickstart/.claude/
+# Check if template exists
+ls -la ~/claude-projects/templates/proj-quickstart/.claude/
+
+# Example of what you might see:
+# commands/
+# agents/
+# mcp.json
+# settings.json
 ```
 
-The script will automatically copy this to new projects.
+**How the template becomes available in Docker:**
+
+```
+Your Mac                              Docker Container
+~/claude-projects/projects/           (inside container)
+  my-project/
+    workspace/              ←→         /workspace/
+      .claude/                         .claude/    ← Claude Code sees this
+      mycode.js                        mycode.js
+```
+
+The `workspace/` folder on your Mac is **live-synced** with `/workspace/` in the container. Any changes on either side appear instantly on the other. This is where your `.claude` folder lives and where Claude Code operates.
 
 ## Usage
 
@@ -159,13 +277,13 @@ claude-stop
 │   │   ├── Dockerfile
 │   │   ├── docker-compose.yml
 │   │   └── workspace/          # Your code goes here (synced with container)
-│   │       ├── .claude/
+│   │       ├── .claude/        # Copied from template at project creation
 │   │       └── [your files]
 │   └── project-2/
 │       └── ...
-└── templates/                   # Reusable templates
-    └── x-current-quickstart/
-        └── .claude/             # Gets copied to new projects
+└── templates/                   # Reusable templates (one-time copy source)
+    └── proj-quickstart/
+        └── .claude/             # Copied to new projects when created
 ```
 
 ## How It Works
@@ -320,12 +438,17 @@ You're running as root. The Dockerfile needs a non-root user (see script).
 
 The script looks for:
 ```
-~/claude-projects/templates/x-current-quickstart/.claude/
+~/claude-projects/templates/proj-quickstart/.claude/
 ```
 
 Either:
 1. Create this directory with your `.claude` template
-2. Or ignore the warning (script will create empty workspace)
+2. Or ignore the warning - **this is perfectly fine!** The script will create an empty workspace for you to build from scratch
+
+**To update an existing project with a template:** Copy manually after creation:
+```bash
+cp -r ~/claude-projects/templates/proj-quickstart/.claude ~/claude-projects/projects/my-project/workspace/
+```
 
 ### Files not syncing between Mac and container
 
@@ -358,11 +481,16 @@ PROJECT_PATH="~/claude-projects/projects/$PROJECT_NAME"
 
 To your preferred location.
 
-### Change Template Location
+### Change Template Location or Name
 
-Edit `new-code-proj` script, change:
+Edit `new-code-proj` script (line 72), change:
 ```bash
-TEMPLATE_CLAUDE="~/claude-projects/templates/x-current-quickstart/.claude"
+TEMPLATE_CLAUDE="~/claude-projects/templates/proj-quickstart/.claude"
+```
+
+To your preferred name or location:
+```bash
+TEMPLATE_CLAUDE="~/claude-projects/templates/my-custom-template/.claude"
 ```
 
 ### Add Pre-installed Tools
