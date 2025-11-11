@@ -1,0 +1,145 @@
+#!/bin/bash
+
+# new-code-proj - Create a new Claude Code Docker project
+# Usage: new-code-proj <project-name>
+
+PROJECT_NAME=$1
+
+if [ -z "$PROJECT_NAME" ]; then
+    echo "Usage: new-code-proj <project-name>"
+    exit 1
+fi
+
+# Update this path to match your setup
+PROJECT_PATH="$HOME/claude-projects/projects/$PROJECT_NAME"
+mkdir -p "$PROJECT_PATH"
+cd "$PROJECT_PATH"
+
+# Create Dockerfile with non-root user
+cat > Dockerfile << 'DOCKERFILE'
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    git \
+    wget \
+    bash \
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user named 'developer'
+RUN useradd -m -s /bin/bash developer && \
+    echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Switch to non-root user
+USER developer
+WORKDIR /home/developer
+
+# Install Claude Code as non-root user
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# Add Claude to PATH
+ENV PATH="/home/developer/.local/bin:${PATH}"
+
+WORKDIR /workspace
+
+CMD ["tail", "-f", "/dev/null"]
+DOCKERFILE
+
+# Create docker-compose.yml
+cat > docker-compose.yml << 'COMPOSE'
+services:
+  claude-code:
+    build: .
+    container_name: ${PROJECT_NAME:-claude-code}
+    volumes:
+      - ./workspace:/workspace
+      - ~/.anthropic:/home/developer/.anthropic
+    stdin_open: true
+    tty: true
+COMPOSE
+
+# Create .env file
+cat > .env << ENVFILE
+PROJECT_NAME=$PROJECT_NAME
+ENVFILE
+
+mkdir workspace
+
+# Copy .claude folder from template (if it exists)
+# Update this path to match your template location
+TEMPLATE_CLAUDE="$HOME/claude-projects/templates/x-current-quickstart/.claude"
+if [ -d "$TEMPLATE_CLAUDE" ]; then
+    cp -r "$TEMPLATE_CLAUDE" workspace/.claude
+    echo "✅ Copied .claude folder from template"
+else
+    echo "⚠️  Warning: Template .claude folder not found at $TEMPLATE_CLAUDE"
+    echo "   You can create a template at: $TEMPLATE_CLAUDE"
+fi
+
+cat > README.md << 'README'
+# $PROJECT_NAME
+
+## Quick Start
+
+```bash
+# Start container
+docker-compose up -d
+
+# Enter container
+docker exec -it $PROJECT_NAME bash
+
+# Run Claude Code
+claude --dangerously-skip-permissions
+
+# Stop container
+docker-compose down
+```
+
+## With Aliases
+
+If you have the aliases set up:
+
+```bash
+claude-start
+claude --dangerously-skip-permissions
+# When done: exit
+claude-stop
+```
+
+## Project Structure
+
+- `workspace/` - Your code goes here (synced with container)
+- `Dockerfile` - Container configuration
+- `docker-compose.yml` - Docker Compose setup
+- `.env` - Environment variables
+
+## Notes
+
+- Files in `workspace/` sync automatically between Mac and container
+- Container runs as non-root user to allow `--dangerously-skip-permissions`
+- Your Claude authentication is mounted from `~/.anthropic/`
+README
+
+cat > .gitignore << 'IGNORE'
+.env
+workspace/*
+!workspace/.gitkeep
+!workspace/.claude
+IGNORE
+
+touch workspace/.gitkeep
+
+echo ""
+echo "✅ Project created at: $PROJECT_PATH"
+echo "📁 Your code goes in: workspace/"
+echo ""
+echo "To start:"
+echo "  cd \"$PROJECT_PATH\""
+echo "  docker-compose up -d"
+echo "  docker exec -it $PROJECT_NAME bash"
+echo ""
+echo "Or with aliases:"
+echo "  cd \"$PROJECT_PATH\""
+echo "  claude-start"
